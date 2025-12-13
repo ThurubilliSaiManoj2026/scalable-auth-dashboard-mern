@@ -1,0 +1,432 @@
+From root:
+
+cd ../frontend
+npm create vite@latest . -- --template react
+npm install react-router-dom axios
+
+frontend/src/main.jsx
+
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App.jsx";
+import { AuthProvider } from "./context/AuthContext.jsx";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);
+
+frontend/src/App.jsx
+
+import { Routes, Route } from "react-router-dom";
+import Login from "./pages/Login.jsx";
+import Register from "./pages/Register.jsx";
+import Dashboard from "./pages/Dashboard.jsx";
+import Profile from "./pages/Profile.jsx";
+import PrivateRoute from "./routes/PrivateRoute.jsx";
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route element={<PrivateRoute />}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/profile" element={<Profile />} />
+      </Route>
+      <Route path="*" element={<Login />} />
+    </Routes>
+  );
+}
+
+export default App;
+
+frontend/src/context/AuthContext.jsx
+
+import { createContext, useContext, useEffect, useState } from "react";
+import { loginApi, registerApi, meApi } from "../services/authService.js";
+
+const AuthContext = createContext(null);
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem("token") || "");
+
+  useEffect(() => {
+    if (token && !user) {
+      meApi(token)
+        .then((data) => {
+          if (data.success) setUser(data.user);
+        })
+        .catch(() => {});
+    }
+  }, [token, user]);
+
+  const login = async (credentials) => {
+    const data = await loginApi(credentials);
+    if (data.success) {
+      setUser(data.user);
+      setToken(data.token);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+    }
+    return data;
+  };
+
+  const register = async (payload) => {
+    const data = await registerApi(payload);
+    if (data.success) {
+      setUser(data.user);
+      setToken(data.token);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+    }
+    return data;
+  };
+
+  const logout = () => {
+    setUser(null);
+    setToken("");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  };
+
+  const value = { user, token, login, register, logout };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = () => useContext(AuthContext);
+
+frontend/src/routes/PrivateRoute.jsx
+
+import { Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+
+const PrivateRoute = () => {
+  const { token } = useAuth();
+  if (!token) return <Navigate to="/login" replace />;
+  return <Outlet />;
+};
+
+export default PrivateRoute;
+
+frontend/src/services/apiClient.js
+
+import axios from "axios";
+
+export const apiClient = (token) => {
+  const instance = axios.create({
+    baseURL: "http://localhost:5000",
+    headers: { "Content-Type": "application/json" }
+  });
+
+  instance.interceptors.request.use((config) => {
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
+
+  return instance;
+};
+
+frontend/src/services/authService.js
+
+import { apiClient } from "./apiClient.js";
+
+export const registerApi = async (payload) => {
+  const { data } = await apiClient().post("/api/auth/register", payload);
+  return data;
+};
+
+export const loginApi = async (payload) => {
+  const { data } = await apiClient().post("/api/auth/login", payload);
+  return data;
+};
+
+export const meApi = async (token) => {
+  const { data } = await apiClient(token).get("/api/auth/me");
+  return data;
+};
+
+frontend/src/services/taskService.js
+
+import { apiClient } from "./apiClient.js";
+
+export const getTasksApi = async (token, params) => {
+  const { data } = await apiClient(token).get("/api/tasks", { params });
+  return data;
+};
+
+export const createTaskApi = async (token, payload) => {
+  const { data } = await apiClient(token).post("/api/tasks", payload);
+  return data;
+};
+
+export const updateTaskApi = async (token, id, payload) => {
+  const { data } = await apiClient(token).put(`/api/tasks/${id}`, payload);
+  return data;
+};
+
+export const deleteTaskApi = async (token, id) => {
+  const { data } = await apiClient(token).delete(`/api/tasks/${id}`);
+  return data;
+};
+
+frontend/src/pages/Register.jsx
+
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+
+const Register = () => {
+  const { register } = useAuth();
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [error, setError] = useState("");
+
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (form.password !== form.confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+    const res = await register({
+      name: form.name,
+      email: form.email,
+      password: form.password
+    });
+    if (res.success) {
+      navigate("/dashboard");
+    } else {
+      setError(res.message || "Register failed");
+    }
+  };
+
+  return (
+    <div>
+      <h2>Register</h2>
+      {error && <p>{error}</p>}
+      <form onSubmit={handleSubmit}>
+        <input name="name" placeholder="Name" onChange={handleChange} />
+        <input name="email" type="email" placeholder="Email" onChange={handleChange} />
+        <input name="password" type="password" placeholder="Password" onChange={handleChange} />
+        <input
+          name="confirm"
+          type="password"
+          placeholder="Confirm Password"
+          onChange={handleChange}
+        />
+        <button type="submit">Sign up</button>
+      </form>
+      <p>
+        Already have an account? <Link to="/login">Login</Link>
+      </p>
+    </div>
+  );
+};
+
+export default Register;
+
+frontend/src/pages/Login.jsx
+
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+
+const Login = () => {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const res = await login(form);
+    if (res.success) {
+      navigate("/dashboard");
+    } else {
+      setError(res.message || "Login failed");
+    }
+  };
+
+  return (
+    <div>
+      <h2>Login</h2>
+      {error && <p>{error}</p>}
+      <form onSubmit={handleSubmit}>
+        <input name="email" type="email" placeholder="Email" onChange={handleChange} />
+        <input
+          name="password"
+          type="password"
+          placeholder="Password"
+          onChange={handleChange}
+        />
+        <button type="submit">Login</button>
+      </form>
+      <p>
+        No account? <Link to="/register">Register</Link>
+      </p>
+    </div>
+  );
+};
+
+export default Login;
+
+frontend/src/pages/Dashboard.jsx
+
+import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext.jsx";
+import {
+  getTasksApi,
+  createTaskApi,
+  updateTaskApi,
+  deleteTaskApi
+} from "../services/taskService.js";
+import { Link } from "react-router-dom";
+
+const Dashboard = () => {
+  const { token, logout, user } = useAuth();
+  const [tasks, setTasks] = useState([]);
+  const [search, setSearch] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+
+  const loadTasks = async () => {
+    const res = await getTasksApi(token, { search });
+    if (res.success) setTasks(res.tasks);
+  };
+
+  useEffect(() => {
+    loadTasks();
+  }, []); // load once
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    const res = await createTaskApi(token, { title, description });
+    if (res.success) {
+      setTitle("");
+      setDescription("");
+      setTasks([res.task, ...tasks]);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const res = await deleteTaskApi(token, id);
+    if (res.success) {
+      setTasks(tasks.filter((t) => t._id !== id));
+    }
+  };
+
+  return (
+    <div>
+      <header>
+        <h2>Dashboard</h2>
+        <p>Welcome, {user?.name}</p>
+        <button onClick={logout}>Logout</button>
+        <Link to="/profile">Profile</Link>
+      </header>
+
+      <section>
+        <form onSubmit={handleCreate}>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Task title"
+          />
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description"
+          />
+          <button type="submit">Add</button>
+        </form>
+      </section>
+
+      <section>
+        <input
+          placeholder="Search tasks"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <button onClick={loadTasks}>Search</button>
+
+        <ul>
+          {tasks.map((task) => (
+            <li key={task._id}>
+              <strong>{task.title}</strong> - {task.status}
+              <button onClick={() => handleDelete(task._id)}>Delete</button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+};
+
+export default Dashboard;
+
+frontend/src/pages/Profile.jsx
+
+import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext.jsx";
+import { apiClient } from "../services/apiClient.js";
+
+const Profile = () => {
+  const { token, user, logout } = useAuth();
+  const [name, setName] = useState(user?.name || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user && token) {
+      apiClient(token)
+        .get("/api/profile")
+        .then((res) => {
+          if (res.data.success) setName(res.data.user.name);
+        })
+        .catch(() => {});
+    }
+  }, [token, user]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await apiClient(token).put("/api/profile", { name });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Profile</h2>
+      <form onSubmit={handleSubmit}>
+        <input value={name} onChange={(e) => setName(e.target.value)} />
+        <button type="submit" disabled={saving}>
+          Save
+        </button>
+      </form>
+      <button onClick={logout}>Logout</button>
+    </div>
+  );
+};
+
+export default Profile;
+
+Run frontend:
+
+npm run dev
