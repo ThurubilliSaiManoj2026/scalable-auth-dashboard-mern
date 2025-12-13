@@ -158,4 +158,3 @@ Introduce UI component library and design system to keep consistent UX as the ap
 Use a dedicated state management (Context is already used; can scale to Zustand/Redux for more complex dashboards).
 
 dotenv, cors, morgan for configuration and logging​
-
