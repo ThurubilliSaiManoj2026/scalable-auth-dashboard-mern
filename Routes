@@ -1,0 +1,72 @@
+backend/src/routes/authRoutes.js
+
+import { Router } from "express";
+import { register, login, getMe } from "../controllers/authController.js";
+import { protect } from "../middlewares/authMiddleware.js";
+
+const router = Router();
+
+router.post("/register", register);
+router.post("/login", login);
+router.get("/me", protect, getMe);
+
+export default router;
+
+backend/src/routes/userRoutes.js
+
+import { Router } from "express";
+import { getProfile, updateProfile } from "../controllers/userController.js";
+import { protect } from "../middlewares/authMiddleware.js";
+
+const router = Router();
+
+router.get("/profile", protect, getProfile);
+router.put("/profile", protect, updateProfile);
+
+export default router;
+
+backend/src/routes/taskRoutes.js
+
+import { Router } from "express";
+import {
+  createTask,
+  getTasks,
+  updateTask,
+  deleteTask
+} from "../controllers/taskController.js";
+import { protect } from "../middlewares/authMiddleware.js";
+
+const router = Router();
+
+router.post("/tasks", protect, createTask);
+router.get("/tasks", protect, getTasks);
+router.put("/tasks/:id", protect, updateTask);
+router.delete("/tasks/:id", protect, deleteTask);
+
+export default router;
+
+backend/src/routes/index.js
+
+import { Router } from "express";
+import authRoutes from "./authRoutes.js";
+import userRoutes from "./userRoutes.js";
+import taskRoutes from "./taskRoutes.js";
+
+const router = Router();
+
+router.use("/api/auth", authRoutes);
+router.use("/api", userRoutes);
+router.use("/api", taskRoutes);
+
+export default router;
+
+.env in backend/
+
+PORT=5000
+MONGO_URI=your_mongo_connection_string
+JWT_SECRET=super_strong_secret_here
+CLIENT_URL=http://localhost:3000
+
+Run backend:
+
+npm run dev
